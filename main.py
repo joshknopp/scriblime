@@ -36,7 +36,7 @@ def authenticate():
             token.write(creds.to_json())
     return creds
 
-def get_folder_id(service, folder_name):
+def get_folder_id(folder_name):
     # Search for the folder by name
     creds = authenticate()
     drive_service = build('drive', 'v3', credentials=creds)
@@ -98,7 +98,7 @@ def update_sheet(row_data):
     service = build('sheets', 'v4', credentials=creds)
 
     # Get the folder ID
-    folder_id = get_folder_id(service, FOLDER_NAME)
+    folder_id = get_folder_id(FOLDER_NAME)
 
     # Create or get the spreadsheet ID
     spreadsheet_id = create_spreadsheet(service, folder_id)
@@ -151,7 +151,6 @@ def process_notification(notification):
     # Check if the file is an audio file (implement your logic here)
     # For example, you can check the file's MIME type
     # If it's an audio file, acknowledge it in the spreadsheet
-    acknowledged_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
     row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
     update_sheet(row_data)
     
