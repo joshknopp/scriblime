@@ -13,6 +13,8 @@ This project is an audio transcription service that connects to Google Drive, tr
 
 The architecture of the audio transcription service involves monitoring a Google Drive folder for new audio files. Upon detection of a new audio file, the service acknowledges it in a Google Sheets document and invokes AssemblyAI for transcription. Once the transcription is complete, the service updates the Google Sheets document with the transcription status.
 
+- [ ] TODO: Update architecture visualization to reflect polling instead of push/webhook
+
 ```mermaid
 graph LR
     A[Google Drive] -->|Push Notification| B(Webhook)
