@@ -6,9 +6,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 import googleapiclient.errors
+import os
+from dotenv import load_dotenv
 
-# Path to your credentials JSON file
-credentials_file = '.env/credentials.json'
+# Load environment variables from .env file
+load_dotenv()
 
 # Scopes required for Drive and Sheets API
 SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
@@ -18,8 +20,8 @@ FOLDER_NAME = 'scriblime'
 FILE_NAME = 'scriblime.log'
 SHEET_NAME = 'Sheet1'
 
-TOKEN_FILE = '.env/token.json'
-CREDENTIALS_FILE = '.env/credentials.json'
+TOKEN_FILE = 'config/token.json'
+CREDENTIALS_FILE = 'config/credentials.json'
 
 def authenticate():
     creds = None
@@ -71,7 +73,7 @@ def create_spreadsheet(service, folder_id):
             'parents': [folder_id],
             'mimeType': 'application/vnd.google-apps.spreadsheet'
         }
-        spreadsheet = service.files().create(body=file_metadata,
+        spreadsheet = drive_service.files().create(body=file_metadata,
                                               fields='id').execute()
         spreadsheet_id = spreadsheet.get('id')
 
@@ -172,3 +174,51 @@ def process_notification(notification):
     url = 'Transcription Result URL'  # TODO Update with the actual URL
     row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
     update_sheet(row_data)
+
+def get_folder_id_by_name(service, folder_name):
+    # Search for the folder by name
+    results = service.files().list(q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
+                                   spaces='drive',
+                                   fields='files(id)').execute()
+    items = results.get('files', [])
+    if not items:
+        raise ValueError(f"Folder '{folder_name}' not found.")
+    else:
+        return items[0]['id']
+
+def get_start_page_token(service):
+    # Retrieve the start page token
+    response = service.changes().getStartPageToken().execute()
+    return response.get('startPageToken')
+
+def watch_folder():
+    creds = authenticate()
+    service = build('drive', 'v3', credentials=creds)
+    
+    # Get the folder ID by name
+    folder_id = get_folder_id_by_name(service, FOLDER_NAME)
+    
+    # Get webhook URL from environment variables
+    webhook_url = os.getenv('WEBHOOK_URL')
+    if not webhook_url:
+        raise ValueError("WEBHOOK_URL not found in .env file")
+
+    # Get the start page token
+    start_page_token = get_start_page_token(service)
+    
+    # Create the request body for watching changes
+    body = {
+        'id': folder_id,
+        'type': 'web_hook',
+        'address': webhook_url,  # Get webhook URL from .env file
+        'pageToken': start_page_token  # Use the start page token
+    }
+
+    print(start_page_token)
+    
+    # Watch changes for the folder
+    watch_result = service.changes().watch(body=body).execute()
+    print(watch_result)
+
+if __name__ == "__main__":
+    watch_folder()
