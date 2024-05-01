@@ -210,14 +210,11 @@ def watch_folder():
     body = {
         'id': folder_id,
         'type': 'web_hook',
-        'address': webhook_url,  # Get webhook URL from .env file
-        'pageToken': start_page_token  # Use the start page token
+        'address': webhook_url  # Get webhook URL from .env file
     }
 
-    print(start_page_token)
-    
     # Watch changes for the folder
-    watch_result = service.changes().watch(body=body).execute()
+    watch_result = service.changes().watch(pageToken=start_page_token, body=body).execute()
     print(watch_result)
 
 if __name__ == "__main__":
