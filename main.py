@@ -9,6 +9,7 @@ import googleapiclient.errors
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+import mimetypes
 
 # Load environment variables from .env file
 load_dotenv()
@@ -39,8 +40,14 @@ def authenticate():
             token.write(creds.to_json())
     return creds
 
+folder_id_cache = {}
+
 def get_folder_id(folder_name):
-    # Search for the folder by name
+    # Check if the folder ID is already cached
+    if folder_name in folder_id_cache:
+        return folder_id_cache[folder_name]
+
+    # Folder ID not found in cache, make API call
     creds = authenticate()
     drive_service = build('drive', 'v3', credentials=creds)
     results = drive_service.files().list(q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
@@ -55,15 +62,28 @@ def get_folder_id(folder_name):
         }
         folder = drive_service.files().create(body=folder_metadata,
                                         fields='id').execute()
-        return folder.get('id')
+        folder_id = folder.get('id')
+        # Cache the folder ID
+        folder_id_cache[folder_name] = folder_id
+        return folder_id
     else:
-        return items[0]['id']
+        folder_id = items[0]['id']
+        # Cache the folder ID
+        folder_id_cache[folder_name] = folder_id
+        return folder_id
+
+
+spreadsheet_id_cache = {}
 
 def create_spreadsheet(service, folder_id):
-    # Check if the spreadsheet already exists
+    # Check if the spreadsheet ID is already cached
+    if folder_id in spreadsheet_id_cache:
+        return spreadsheet_id_cache[folder_id]
+
+    # Spreadsheet ID not found in cache, make API call
     creds = authenticate()
     drive_service = build('drive', 'v3', credentials=creds)
-    results = drive_service.files().list(q=f"name='{LOG_FILE_NAME}' and '{folder_id}' in parents and mimeType='application/vnd.google-apps.spreadsheet'",
+    results = drive_service.files().list(q=f"name='{LOG_FILE_NAME}' and '{folder_id}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
                                    spaces='drive',
                                    fields='files(id)').execute()
     items = results.get('files', [])
@@ -92,9 +112,14 @@ def create_spreadsheet(service, folder_id):
             body=body
         ).execute()
         
+        # Cache the spreadsheet ID
+        spreadsheet_id_cache[folder_id] = spreadsheet_id
         return spreadsheet_id
     else:
-        return items[0]['id']
+        spreadsheet_id = items[0]['id']
+        # Cache the spreadsheet ID
+        spreadsheet_id_cache[folder_id] = spreadsheet_id
+        return spreadsheet_id
 
 def update_sheet(row_data):
     creds = authenticate()
@@ -140,7 +165,6 @@ def update_sheet(row_data):
     ).execute()
     print('Row updated/added:', result)
 
-
 def process_notification(notification):
     file_id = notification['fileId']
     file_name = notification['fileName']
@@ -151,34 +175,52 @@ def process_notification(notification):
     completed_time = None  # Will be updated later
     url = None
     
-    # Check if the file is an audio file (implement your logic here)
-    # For example, you can check the file's MIME type
-    # If it's an audio file, acknowledge it in the spreadsheet
-    row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
-    update_sheet(row_data)
-    
-    # Invoke AssemblyAI for transcription
-    # (implement this part based on AssemblyAI's API documentation)
-    # For example:
-    # transcription_result = invoke_assemblyai(file_id)
-    # Update the spreadsheet to indicate processing
-    processing_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-    row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
-    update_sheet(row_data)
-    
-    # Poll AssemblyAI for transcription status
-    # (implement this part based on AssemblyAI's API documentation)
-    # For example:
-    # status = poll_assemblyai_status(transcription_result)
-    # Once transcription is complete, update the spreadsheet again
-    completed_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-    url = 'Transcription Result URL'  # TODO Update with the actual URL
-    row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
-    update_sheet(row_data)
+    # Check if the file is a sound or video file
+    mime_type, _ = mimetypes.guess_type(file_name)
+    if mime_type and mime_type.startswith(('audio/', 'video/')):
+        # Acknowledge the file in the spreadsheet
+        row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
+        update_sheet(row_data)
+        
+        # Check if the document already exists
+        creds = authenticate()
+        drive_service = build('drive', 'v3', credentials=creds)
+        folder_id = get_folder_id(FOLDER_NAME)
+        query = f"name='{file_name}.docx' and '{folder_id}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false"
+        results = drive_service.files().list(q=query, fields='files(id)').execute()
+        existing_files = results.get('files', [])
+        
+        if not existing_files:
+            # Create a new Google Doc
+            file_metadata = {
+                'name': f"{file_name}.docx",
+                'parents': [folder_id],
+                'mimeType': 'application/vnd.google-apps.document'
+            }
+            new_doc = drive_service.files().create(body=file_metadata).execute()
+            
+            # Write the current datetime as a string to the body of the new document
+            current_datetime_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            service = build('docs', 'v1', credentials=creds)
+            service.documents().batchUpdate(documentId=new_doc['id'], body={
+                'requests': [
+                    {
+                        'insertText': {
+                            'location': {'index': 1},
+                            'text': current_datetime_str
+                        }
+                    }
+                ]
+            }).execute()
+        else:
+            print(f"Document {file_name}.docx already exists. Skipping creation.")
+    else:
+        print(f"Ignoring file {file_name}: Not a sound or video file")
+
 
 def get_folder_id_by_name(service, folder_name):
     # Search for the folder by name
-    results = service.files().list(q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
+    results = service.files().list(q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
                                    spaces='drive',
                                    fields='files(id)').execute()
     items = results.get('files', [])
