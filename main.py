@@ -174,11 +174,16 @@ def process_notification(notification):
     processing_time = None  # Will be updated later
     completed_time = None  # Will be updated later
     url = None
+
+    # Acknowledge the file in the spreadsheet - TODO will probably scrap this in later dev
+    row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
+    update_sheet(row_data)
     
     # Check if the file is a sound or video file
     mime_type, _ = mimetypes.guess_type(file_name)
     if mime_type and mime_type.startswith(('audio/', 'video/')):
-        # Acknowledge the file in the spreadsheet
+        # Show as processing the file in the spreadsheet
+        processing_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
         update_sheet(row_data)
         
@@ -212,10 +217,19 @@ def process_notification(notification):
                     }
                 ]
             }).execute()
+
+            # Show as completed the file in the spreadsheet
+            completed_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
+            update_sheet(row_data)
         else:
             print(f"Document {file_name}.docx already exists. Skipping creation.")
     else:
         print(f"Ignoring file {file_name}: Not a sound or video file")
+        # Show as ignored the file in the spreadsheet - TODO will probably scrap this in later dev
+        url = "Skipped - no audio"
+        row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
+        update_sheet(row_data)
 
 
 def get_folder_id_by_name(service, folder_name):
