@@ -10,6 +10,7 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime
 import mimetypes
+import assemblyai as aai
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,6 +26,7 @@ SHEET_NAME = 'Sheet1'
 TOKEN_FILE = 'config/token.json'
 CREDENTIALS_FILE = 'config/credentials.json'
 
+# If running into refresh_token issues: https://stackoverflow.com/questions/10827920/not-receiving-google-oauth-refresh-token
 def authenticate():
     creds = None
     if os.path.exists(TOKEN_FILE):
@@ -35,7 +37,7 @@ def authenticate():
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
                 CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=5001)
         with open(TOKEN_FILE, 'w') as token:
             token.write(creds.to_json())
     return creds
@@ -205,14 +207,14 @@ def process_notification(notification):
             new_doc = drive_service.files().create(body=file_metadata).execute()
             
             # Write the current datetime as a string to the body of the new document
-            current_datetime_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            transcribed_text = get_transcribed_text(file_id)
             service = build('docs', 'v1', credentials=creds)
             service.documents().batchUpdate(documentId=new_doc['id'], body={
                 'requests': [
                     {
                         'insertText': {
                             'location': {'index': 1},
-                            'text': current_datetime_str
+                            'text': transcribed_text
                         }
                     }
                 ]
@@ -231,6 +233,33 @@ def process_notification(notification):
         row_data = [file_id, file_name, acknowledged_time, processing_time, completed_time, url]
         update_sheet(row_data)
 
+def get_transcribed_text(file_id):
+    api_key_file = 'config/assemblyai.key'
+    
+    # Check if the API key file exists
+    if not os.path.exists(api_key_file):
+        raise FileNotFoundError("API key file not found.")
+    
+    # Read the API key from the file
+    with open(api_key_file, 'r') as file:
+        api_key = file.read().strip()
+    
+    aai.settings.api_key = api_key
+    url = f"https://drive.usercontent.google.com/uc?id={file_id}"
+    config = aai.TranscriptionConfig(speaker_labels=True)
+
+    transcriber = aai.Transcriber()
+    transcript = transcriber.transcribe(url, config=config)
+
+    if transcript.status == aai.TranscriptStatus.error:
+        print(transcript.error)
+        result = f"error occurred at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())} with message: {transcript.error}"
+    else:
+        result = ""
+        for utterance in transcript.utterances:
+            result += f"Speaker {utterance.speaker}: {utterance.text}\n"
+
+    return result
 
 def get_folder_id_by_name(service, folder_name):
     # Search for the folder by name
