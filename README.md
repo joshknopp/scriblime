@@ -1,3 +1,5 @@
+![A robot with microphone for a head typing on a keyboard](./header.png "A robot with microphone for a head typing on a keyboard")
+
 # Scriblime - Audio Transcription Service
 
 This project is an audio transcription service that connects to [Google Drive](https://drive.google.com/drive/home), transcribes audio files using the [AssemblyAI](https://www.assemblyai.com/) transcription API, and stores the transcription results in Google Docs and Google Sheets.
@@ -69,3 +71,7 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 ## License
 
 This project is licensed under the MIT License.
+
+## Credit
+
+Header image created with [Ideogram.ai](https://ideogram.ai/).
