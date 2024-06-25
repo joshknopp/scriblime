@@ -23,6 +23,7 @@ FOLDER_NAME = 'scriblime'
 LOG_FILE_NAME = 'scriblime.log'
 SHEET_NAME = 'Sheet1'
 
+# TODO use env vars
 TOKEN_FILE = 'config/token.json'
 CREDENTIALS_FILE = 'config/credentials.json'
 
@@ -234,6 +235,7 @@ def process_notification(notification):
         update_sheet(row_data)
 
 def get_transcribed_text(file_id):
+    # TODO use env var
     api_key_file = 'config/assemblyai.key'
     
     # Check if the API key file exists
@@ -245,7 +247,7 @@ def get_transcribed_text(file_id):
         api_key = file.read().strip()
     
     aai.settings.api_key = api_key
-    url = f"https://drive.usercontent.google.com/uc?id={file_id}"
+    url = f"https://drive.usercontent.google.com/uc?id={file_id}&confirm=t"
     config = aai.TranscriptionConfig(speaker_labels=True)
 
     transcriber = aai.Transcriber()
